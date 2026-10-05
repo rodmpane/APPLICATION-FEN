@@ -23,7 +23,10 @@ app.use(helmet());
 
 app.use(
     cors({
-        origin: true,
+        origin: [
+            "http://localhost:5173",
+            "https://application-fen-1.onrender.com"
+        ],
         credentials: true
     })
 );
