@@ -25,7 +25,11 @@ app.use(
     cors({
         origin: [
             "http://localhost:5173",
-            "https://application-fen-1.onrender.com"
+            "https://application-fen-1.onrender.com",
+            "https://application-fen.onrender.com",
+            "https://application-fen-api.onrender.com",
+            "https://localhost",
+            "capacitor://localhost"
         ],
         credentials: true
     })
