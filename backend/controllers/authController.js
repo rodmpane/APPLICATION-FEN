@@ -2,7 +2,6 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import pool from "../config/database.js";
 
-
 /*
 |--------------------------------------------------------------------------
 | CONNEXION
@@ -11,12 +10,25 @@ import pool from "../config/database.js";
 
 export const loginController = async (req, res) => {
     try {
-        const { username, password } = req.body;
+        const {
+            email,
+            username,
+            password
+        } = req.body;
 
-        if (!username || !password) {
+        const identifiant = (
+            email ||
+            username ||
+            ""
+        )
+            .trim()
+            .toLowerCase();
+
+        if (!identifiant || !password) {
             return res.status(400).json({
                 success: false,
-                message: "Nom d'utilisateur et mot de passe obligatoires."
+                message:
+                    "Adresse e-mail et mot de passe obligatoires."
             });
         }
 
@@ -25,67 +37,114 @@ export const loginController = async (req, res) => {
             SELECT
                 id,
                 nom,
-                username,
-                password_hash,
+                email,
+                mot_de_passe,
                 role,
                 actif
-            FROM auth_users
-            WHERE username = $1
+            FROM users
+            WHERE LOWER(email) = $1
             LIMIT 1
             `,
-            [username.trim()]
+            [identifiant]
+        );
+
+        console.log(
+            "LOGIN - compte trouvé :",
+            result.rows.length > 0
         );
 
         if (result.rows.length === 0) {
             return res.status(401).json({
                 success: false,
-                message: "Nom d'utilisateur ou mot de passe incorrect."
+                message:
+                    "Adresse e-mail ou mot de passe incorrect."
             });
         }
 
         const utilisateur = result.rows[0];
 
+        console.log(
+            "LOGIN - compte actif :",
+            utilisateur.actif
+        );
+
+        console.log(
+            "LOGIN - hash présent :",
+            Boolean(utilisateur.mot_de_passe)
+        );
+
         if (!utilisateur.actif) {
             return res.status(403).json({
                 success: false,
-                message: "Ce compte est désactivé."
+                message:
+                    "Ce compte est désactivé."
             });
         }
 
-        const motDePasseCorrect = await bcrypt.compare(
-            password,
-            utilisateur.password_hash
+        if (!utilisateur.mot_de_passe) {
+            console.error(
+                "LOGIN - mot de passe absent de la base."
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Le compte administrateur est mal configuré."
+            });
+        }
+
+        const motDePasseCorrect =
+            await bcrypt.compare(
+                password,
+                utilisateur.mot_de_passe
+            );
+
+        console.log(
+            "LOGIN - mot de passe correct :",
+            motDePasseCorrect
         );
 
         if (!motDePasseCorrect) {
             return res.status(401).json({
                 success: false,
-                message: "Nom d'utilisateur ou mot de passe incorrect."
+                message:
+                    "Adresse e-mail ou mot de passe incorrect."
             });
         }
 
         if (!process.env.JWT_SECRET) {
             console.error(
-                "JWT_SECRET absent du fichier .env"
+                "LOGIN - JWT_SECRET absent."
             );
 
             return res.status(500).json({
                 success: false,
-                message: "Configuration de sécurité du serveur absente."
+                message:
+                    "Configuration de sécurité du serveur absente."
             });
         }
+
+        const role = String(
+            utilisateur.role || "admin"
+        )
+            .trim()
+            .toUpperCase();
 
         const token = jwt.sign(
             {
                 id: utilisateur.id,
-                username: utilisateur.username,
-                role: utilisateur.role,
+                email: utilisateur.email,
+                role,
                 nom: utilisateur.nom
             },
             process.env.JWT_SECRET,
             {
                 expiresIn: "8h"
             }
+        );
+
+        console.log(
+            "LOGIN - token JWT créé avec succès."
         );
 
         return res.json({
@@ -95,8 +154,8 @@ export const loginController = async (req, res) => {
             utilisateur: {
                 id: utilisateur.id,
                 nom: utilisateur.nom,
-                username: utilisateur.username,
-                role: utilisateur.role
+                email: utilisateur.email,
+                role
             }
         });
 
@@ -108,7 +167,8 @@ export const loginController = async (req, res) => {
 
         return res.status(500).json({
             success: false,
-            message: "Erreur lors de la connexion."
+            message:
+                "Erreur lors de la connexion."
         });
     }
 };
@@ -121,8 +181,6 @@ export const loginController = async (req, res) => {
 |
 | GET /api/auth/me
 |
-| Le middleware authentifier vérifie déjà le JWT.
-|
 |--------------------------------------------------------------------------
 */
 
@@ -131,7 +189,8 @@ export const meController = async (req, res) => {
         if (!req.utilisateur) {
             return res.status(401).json({
                 success: false,
-                message: "Utilisateur non authentifié."
+                message:
+                    "Utilisateur non authentifié."
             });
         }
 
@@ -140,10 +199,10 @@ export const meController = async (req, res) => {
             SELECT
                 id,
                 nom,
-                username,
+                email,
                 role,
                 actif
-            FROM auth_users
+            FROM users
             WHERE id = $1
             LIMIT 1
             `,
@@ -153,7 +212,8 @@ export const meController = async (req, res) => {
         if (result.rows.length === 0) {
             return res.status(404).json({
                 success: false,
-                message: "Utilisateur introuvable."
+                message:
+                    "Utilisateur introuvable."
             });
         }
 
@@ -162,17 +222,24 @@ export const meController = async (req, res) => {
         if (!utilisateur.actif) {
             return res.status(403).json({
                 success: false,
-                message: "Ce compte est désactivé."
+                message:
+                    "Ce compte est désactivé."
             });
         }
+
+        const role = String(
+            utilisateur.role || ""
+        )
+            .trim()
+            .toUpperCase();
 
         return res.json({
             success: true,
             utilisateur: {
                 id: utilisateur.id,
                 nom: utilisateur.nom,
-                username: utilisateur.username,
-                role: utilisateur.role
+                email: utilisateur.email,
+                role
             }
         });
 
@@ -184,7 +251,8 @@ export const meController = async (req, res) => {
 
         return res.status(500).json({
             success: false,
-            message: "Erreur lors de la récupération du profil."
+            message:
+                "Erreur lors de la récupération du profil."
         });
     }
 };
