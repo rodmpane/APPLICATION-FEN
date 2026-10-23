@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import dotenv from "dotenv";
@@ -26,6 +26,7 @@ app.use(
         origin: [
             "http://localhost:5173",
             "https://application-fen-1.onrender.com",
+            "https://application-fen-web.onrender.com",
             "https://application-fen.onrender.com",
             "https://application-fen-api.onrender.com",
             "https://localhost",
@@ -44,7 +45,7 @@ app.use(express.json({ limit: "10mb" }));
 app.get("/", (req, res) => {
     res.json({
         success: true,
-        message: "API Fondation Ézéchiel NTAL opérationnelle"
+        message: "API Fondation Ã‰zÃ©chiel NTAL opÃ©rationnelle"
     });
 });
 
