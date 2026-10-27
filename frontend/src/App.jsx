@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import DemandesAdhesionPage from "./DemandesAdhesionPage";
 import "./App.css";
 
@@ -948,7 +948,17 @@ const menus = [
     { id: "provinces", label: "Provinces", icon: "◈" },
     { id: "zones", label: "Zones", icon: "◇" },
     { id: "coordinations", label: "Coordinations", icon: "◎" },
+    { id: "devis-usd", label: "Devis en USD", icon: "＄" },
     { id: "parametres", label: "Paramètres", icon: "⚙" },
+    { id: "etat-financier", label: "État financier", icon: "💰" },
+    { id: "rapports", label: "Rapports", icon: "📊" },
+    { id: "rapport-general", label: "Rapport général", icon: "📋" },
+    { id: "projets", label: "Projets", icon: "🎯" },
+    { id: "etat-projets", label: "État des projets", icon: "📈" },
+    { id: "presentation-fondation", label: "Présentation de la fondation", icon: "🏛️" },
+    { id: "responsables-fondation", label: "Présentation des responsables", icon: "👥" },
+    { id: "coordination-nationale", label: "Coordination Nationale", icon: "🌍" },
+    { id: "coordination-provinciale", label: "Coordination Provinciale", icon: "📍" },
 ];
 
 return (
@@ -3025,9 +3035,270 @@ function ParametresPage() {
     );
 }
 
+
+/* ============================================================
+   MODULE DEVIS EN USD
+============================================================ */
+function DevisUsdPage({ utilisateur }) {
+    const [devis, setDevis] = useState([]);
+    const [chargementDevis, setChargementDevis] = useState(true);
+    const [erreurDevis, setErreurDevis] = useState("");
+    const [messageDevis, setMessageDevis] = useState("");
+    const [commentaires, setCommentaires] = useState({});
+    const [form, setForm] = useState({ titre: "", description: "", montant_usd: "", fournisseur: "" });
+    const [editionId, setEditionId] = useState(null);
+    const role = String(utilisateur?.role || utilisateur?.role_nom || utilisateur?.profil || "").trim().toUpperCase();
+    const admin = ["ADMIN", "ADMINISTRATEUR", "ADMINISTRATOR"].includes(role);
+    const sg = ["SECRETAIRE_GENERAL", "SECRÉTAIRE_GÉNÉRAL", "SG", "SECRETARY_GENERAL"].includes(role);
+    const president = ["PRESIDENT", "PRÉSIDENT"].includes(role);
+    const coord = ["COORDONNATEUR", "COORDONNATEUR_PROVINCIAL", "COORDINATEUR", "COORDINATOR", "COORDINATEUR_PROVINCIAL"].includes(role);
+    const direction = admin || sg || president;
+
+    async function charger() {
+        setChargementDevis(true); setErreurDevis("");
+        try {
+            const data = await requeteAPI("/api/devis-usd");
+            setDevis(Array.isArray(data?.devis) ? data.devis : []);
+        } catch (e) { setErreurDevis(e.message || "Chargement des devis impossible."); }
+        finally { setChargementDevis(false); }
+    }
+    useEffect(() => { charger(); }, []);
+
+    function changer(champ, valeur) { setForm((ancien) => ({ ...ancien, [champ]: valeur })); }
+
+    async function enregistrer(e) {
+        e.preventDefault(); setErreurDevis(""); setMessageDevis("");
+        try {
+            const corps = { ...form, montant_usd: Number(form.montant_usd) };
+            const data = editionId
+                ? await requeteAPI(`/api/devis-usd/${editionId}`, { method: "PUT", body: JSON.stringify(corps) })
+                : await requeteAPI("/api/devis-usd", { method: "POST", body: JSON.stringify(corps) });
+            setMessageDevis(data.message || "Devis enregistré.");
+            setForm({ titre: "", description: "", montant_usd: "", fournisseur: "" }); setEditionId(null);
+            await charger();
+        } catch (e) { setErreurDevis(e.message); }
+    }
+
+    async function action(id, actionNom) {
+        setErreurDevis(""); setMessageDevis("");
+        try {
+            const commentaire = commentaires[id] || "";
+            const data = await requeteAPI(`/api/devis-usd/${id}/action`, { method: "POST", body: JSON.stringify({ action: actionNom, commentaire }) });
+            setMessageDevis(data.message || "Action enregistrée."); await charger();
+        } catch (e) { setErreurDevis(e.message); }
+    }
+
+    async function exporter() {
+        try {
+            const token = obtenirToken();
+            const response = await fetch(`${API_URL}/api/devis-usd/export/excel`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+            if (!response.ok) {
+                let data = {}; try { data = await response.json(); } catch {}
+                throw new Error(data.message || "Export Excel impossible.");
+            }
+            const blob = await response.blob(); const url = URL.createObjectURL(blob);
+            const a = document.createElement("a"); a.href = url; a.download = "devis-usd.xlsx"; a.click(); URL.revokeObjectURL(url);
+        } catch (e) { setErreurDevis(e.message); }
+    }
+
+    const champs = { width: "100%", boxSizing: "border-box", padding: "10px 12px", border: "1px solid #d6dce5", borderRadius: "8px", marginTop: "5px", marginBottom: "12px", font: "inherit" };
+    const bouton = { border: 0, borderRadius: "8px", padding: "9px 12px", cursor: "pointer", fontWeight: 600, margin: "3px" };
+    const etiquette = { display: "block", fontWeight: 600, fontSize: "13px" };
+    const autoriseCreation = admin || coord;
+    const libelleStatut = { BROUILLON: "Brouillon", TRANSMIS_SG: "Transmis au SG", REJETE_SG: "Rejeté par le SG", VALIDE_SG: "Validé par le SG", TRANSMIS_PRESIDENT: "Transmis au Président", REJETE_PRESIDENT: "Rejeté par le Président", VALIDE: "Validé", ANNULE: "Annulé" };
+
+    return <div className="contenu-page">
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap", marginBottom:18}}>
+            <div><h2 style={{marginBottom:5}}>Devis en USD</h2><p style={{margin:0, color:"#64748b"}}>Création, transmission et suivi des décisions.</p></div>
+            <button style={{...bouton, background:"#0f4c81", color:"#fff"}} onClick={exporter}>⇩ Exporter Excel</button>
+        </div>
+        {erreurDevis && <div className="alerte alerte-erreur" role="alert">{erreurDevis}</div>}
+        {messageDevis && <div className="alerte" style={{background:"#e8f7ee",color:"#17663a",padding:12,borderRadius:8,marginBottom:12}}>{messageDevis}</div>}
+        {autoriseCreation && <form onSubmit={enregistrer} style={{background:"#fff",padding:18,borderRadius:12,boxShadow:"0 3px 15px #0000000b",marginBottom:20}}>
+            <h3>{editionId ? "Modifier le devis" : "Nouveau devis"}</h3>
+            <label style={etiquette}>Titre du devis *<input style={champs} required value={form.titre} onChange={e=>changer("titre",e.target.value)} /></label>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:12}}>
+                <label style={etiquette}>Montant (USD) *<input style={champs} type="number" min="0.01" step="0.01" required value={form.montant_usd} onChange={e=>changer("montant_usd",e.target.value)} /></label>
+                <label style={etiquette}>Fournisseur<input style={champs} value={form.fournisseur} onChange={e=>changer("fournisseur",e.target.value)} /></label>
+            </div>
+            <label style={etiquette}>Description<textarea style={{...champs,minHeight:80}} value={form.description} onChange={e=>changer("description",e.target.value)} /></label>
+            <button type="submit" style={{...bouton,background:"#0f4c81",color:"#fff"}}>{editionId ? "Enregistrer les modifications" : "Créer le devis"}</button>
+            {editionId && <button type="button" style={bouton} onClick={()=>{setEditionId(null);setForm({titre:"",description:"",montant_usd:"",fournisseur:""});}}>Annuler</button>}
+        </form>}
+        <div style={{background:"#fff",borderRadius:12,padding:18,boxShadow:"0 3px 15px #0000000b"}}>
+            <h3>Liste des devis</h3>
+            {chargementDevis ? <p>Chargement des devis…</p> : devis.length === 0 ? <p>Aucun devis à afficher.</p> :
+            <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",minWidth:850}}>
+                <thead><tr>{["Référence","Titre / fournisseur","Montant","Statut","Décisions / actions"].map(t=><th key={t} style={{textAlign:"left",padding:10,borderBottom:"2px solid #e2e8f0"}}>{t}</th>)}</tr></thead>
+                <tbody>{devis.map(d=>{
+                    const proprietaire = Number(d.coordonnateur_id) === Number(utilisateur?.id || utilisateur?.user_id || utilisateur?.utilisateur_id);
+                    const modifiable = (admin || (coord && proprietaire)) && ["BROUILLON","REJETE_SG","REJETE_PRESIDENT"].includes(d.statut);
+                    return <tr key={d.id}>
+                        <td style={{padding:10,borderBottom:"1px solid #e2e8f0"}}>{d.reference || `DEV-${d.id}`}</td>
+                        <td style={{padding:10,borderBottom:"1px solid #e2e8f0"}}><strong>{d.titre}</strong><br/><small>{d.fournisseur || "Fournisseur non précisé"}</small>{d.description && <p style={{margin:"5px 0"}}>{d.description}</p>}</td>
+                        <td style={{padding:10,borderBottom:"1px solid #e2e8f0",whiteSpace:"nowrap"}}>{Number(d.montant_usd).toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})} $</td>
+                        <td style={{padding:10,borderBottom:"1px solid #e2e8f0"}}><strong>{libelleStatut[d.statut] || d.statut}</strong>{d.commentaire_sg && <p style={{fontSize:12}}>SG : {d.commentaire_sg}</p>}{d.commentaire_president && <p style={{fontSize:12}}>Président : {d.commentaire_president}</p>}</td>
+                        <td style={{padding:10,borderBottom:"1px solid #e2e8f0",minWidth:230}}>
+                            {modifiable && <button style={{...bouton,background:"#eef2ff"}} onClick={()=>{setEditionId(d.id);setForm({titre:d.titre,description:d.description||"",montant_usd:d.montant_usd,fournisseur:d.fournisseur||""});}}>Modifier</button>}
+                            {modifiable && <button style={{...bouton,background:"#dbeafe"}} onClick={()=>action(d.id,"TRANSMETTRE_SG")}>Transmettre au SG</button>}
+                            {direction && d.statut==="TRANSMIS_SG" && sgOrAdmin(sg,admin) && <><textarea placeholder="Motif (obligatoire en cas de rejet)" style={{...champs,minHeight:50}} value={commentaires[d.id]||""} onChange={e=>setCommentaires(o=>({...o,[d.id]:e.target.value}))}/><button style={{...bouton,background:"#dcfce7"}} onClick={()=>action(d.id,"VALIDER_SG")}>Valider SG</button><button style={{...bouton,background:"#fee2e2"}} onClick={()=>action(d.id,"REJETER_SG")}>Rejeter SG</button></>}
+                            {direction && d.statut==="VALIDE_SG" && sgOrAdmin(sg,admin) && <button style={{...bouton,background:"#dbeafe"}} onClick={()=>action(d.id,"TRANSMETTRE_PRESIDENT")}>Transmettre au Président</button>}
+                            {direction && d.statut==="TRANSMIS_PRESIDENT" && (president||admin) && <><textarea placeholder="Motif (obligatoire en cas de rejet)" style={{...champs,minHeight:50}} value={commentaires[d.id]||""} onChange={e=>setCommentaires(o=>({...o,[d.id]:e.target.value}))}/><button style={{...bouton,background:"#dcfce7"}} onClick={()=>action(d.id,"VALIDER_PRESIDENT")}>Valider</button><button style={{...bouton,background:"#fee2e2"}} onClick={()=>action(d.id,"REJETER_PRESIDENT")}>Rejeter</button></>}
+                        </td>
+                    </tr>
+                })}</tbody>
+            </table></div>}
+        </div>
+    </div>;
+}
+function sgOrAdmin(sg, admin) { return sg || admin; }
+
+
 /* ============================================================
 APPLICATION PRINCIPALE
 ============================================================ */
+
+
+// ===== PAGES INSTITUTIONNELLES F.E.N. =====
+function PageInstitutionnelle({ page }) {
+    const [rubrique, setRubrique] = React.useState("objectifs");
+
+    const rubriques = {
+        objectifs: {
+            titre: "NOS OBJECTIFS",
+            texte: "Promouvoir la solidarité, l'unité, le travail et le développement communautaire."
+        },
+        mission: {
+            titre: "NOTRE MISSION",
+            texte: "Rassembler les membres autour d'actions concrètes en faveur de l'espoir et du changement."
+        },
+        credo: {
+            titre: "NOTRE CREDO",
+            texte: "L'Amour, l'Unité et le Travail constituent les valeurs fondamentales de notre engagement."
+        },
+        sommes: {
+            titre: "CE QUE NOUS SOMMES",
+            texte: "La Fondation Ézéchiel NTAL, F.E.N. ASBL, est une organisation fondée sur la solidarité et l'engagement collectif."
+        },
+        vision: {
+            titre: "NOTRE VISION",
+            texte: "Construire ensemble un avenir meilleur, dans l'unité, la responsabilité et le développement."
+        },
+        rejoindre: {
+            titre: "REJOIGNEZ-NOUS",
+            texte: "Participez à nos initiatives et contribuez à notre mission collective."
+        }
+    };
+
+    const pages = {
+        "etat-financier": {
+            titre: "État financier",
+            texte: "Espace consacré au suivi financier de la fondation."
+        },
+        rapports: {
+            titre: "Rapports",
+            texte: "Espace de consultation et de préparation des rapports."
+        },
+        "rapport-general": {
+            titre: "Rapport général",
+            texte: "Vue générale des activités et des résultats de la fondation."
+        },
+        projets: {
+            titre: "Projets",
+            texte: "Espace de présentation et de suivi des projets de la fondation."
+        },
+        "etat-projets": {
+            titre: "État des projets",
+            texte: "Espace consacré à l'avancement des projets."
+        },
+        "responsables-fondation": {
+            titre: "Présentation des responsables",
+            texte: "Administrateur : Rodrigues MPANE. Président : Ézéchiel NTAL. Secrétaire Général : Jean-claude KIKANGA."
+        },
+        "coordination-nationale": {
+            titre: "Coordination Nationale",
+            texte: "Espace de présentation et de suivi de la Coordination Nationale."
+        },
+        "coordination-provinciale": {
+            titre: "Coordination Provinciale",
+            texte: "Espace de présentation et de suivi des coordinations provinciales."
+        }
+    };
+
+    const estPresentation = page === "presentation-fondation";
+    const contenu = pages[page];
+
+    return (
+        <div className="contenu-page">
+            <div className="carte-formulaire" style={{ padding: 24 }}>
+                <h2>{estPresentation ? "Présentation de la fondation" : contenu?.titre}</h2>
+
+                {estPresentation ? (
+                    <>
+                        <p>
+                            Fondation Ézéchiel NTAL — F.E.N. ASBL
+                        </p>
+                        <p>
+                            Ensemble pour l’avenir, Unis pour le changement
+                        </p>
+
+                        <div style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: 10,
+                            marginTop: 20,
+                            marginBottom: 20
+                        }}>
+                            {Object.entries(rubriques).map(([id, item]) => (
+                                <button
+                                    key={id}
+                                    type="button"
+                                    onClick={() => setRubrique(id)}
+                                    style={{
+                                        padding: "10px 14px",
+                                        borderRadius: 8,
+                                        border: "1px solid #d1d5db",
+                                        cursor: "pointer",
+                                        background: rubrique === id ? "#0f4c81" : "#fff",
+                                        color: rubrique === id ? "#fff" : "#1f2937"
+                                    }}
+                                >
+                                    {item.titre}
+                                </button>
+                            ))}
+                        </div>
+
+                        <h3>{rubriques[rubrique].titre}</h3>
+                        <p>{rubriques[rubrique].texte}</p>
+                    </>
+                ) : (
+                    <>
+                        <p>{contenu?.texte}</p>
+
+                        {page === "etat-financier" && (
+                            <p>
+                                Les données financières devront être reliées aux
+                                recettes et dépenses enregistrées dans l'application.
+                            </p>
+                        )}
+
+                        {page === "projets" && (
+                            <p>
+                                Les fonctionnalités de création et d'enregistrement
+                                des projets seront intégrées dans une étape suivante.
+                            </p>
+                        )}
+                    </>
+                )}
+
+                <hr style={{ margin: "24px 0" }} />
+                <p style={{ textAlign: "center", color: "#64748b" }}>
+                    L’Amour • L’Unité • Le Travail
+                </p>
+            </div>
+        </div>
+    );
+}
 
 export default function App() {
 const [utilisateur, setUtilisateur] =
@@ -3307,6 +3578,8 @@ if (chargement && page === "dashboard") {
             type="coordination"
         />
     );
+} else if (page === "devis-usd") {
+    contenu = <DevisUsdPage utilisateur={utilisateur} />;
 } else if (page === "parametres") {
     contenu = <ParametresPage />;
 } else {
@@ -3329,6 +3602,7 @@ const titres = {
     provinces: "Provinces",
     zones: "Zones",
     coordinations: "Coordinations",
+    "devis-usd": "Devis en USD",
     parametres: "Paramètres de la fondation",
 };
 
@@ -3367,3 +3641,4 @@ return (
 );
 
 }
+
